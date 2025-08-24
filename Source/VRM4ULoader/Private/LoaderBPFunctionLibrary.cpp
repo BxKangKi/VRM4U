@@ -2,7 +2,7 @@
 
 #include "LoaderBPFunctionLibrary.h"
 
-//#include "VRM4U.h"
+// #include "VRM4U.h"
 #include "VrmSkeletalMesh.h"
 #include "VrmModelActor.h"
 #include "VrmAssetListObject.h"
@@ -24,7 +24,7 @@
 #include "Animation/NodeMappingContainer.h"
 #include "Animation/PoseAsset.h"
 
-//#include ".h"
+// #include ".h"
 
 #include "RenderingThread.h"
 #include "Rendering/SkeletalMeshModel.h"
@@ -42,7 +42,7 @@
 #include "IImageWrapperModule.h"
 #include "Engine/Blueprint.h"
 
-#if	UE_VERSION_OLDER_THAN(4,26,0)
+#if UE_VERSION_OLDER_THAN(4, 26, 0)
 #include "AssetRegistryModule.h"
 #else
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -51,10 +51,9 @@
 #include "UObject/Package.h"
 #include "Engine/Engine.h"
 
+// #include "Windows/WindowsSystemIncludes.h"
 
-//#include "Windows/WindowsSystemIncludes.h"
-
-#if	UE_VERSION_OLDER_THAN(5,0,0)
+#if UE_VERSION_OLDER_THAN(5, 0, 0)
 #else
 #include "EditorFramework/AssetImportData.h"
 #include "UObject/SavePackage.h"
@@ -68,7 +67,7 @@
 
 #include "VrmRigHeader.h"
 
-#if UE_VERSION_OLDER_THAN(5,4,0)
+#if UE_VERSION_OLDER_THAN(5, 4, 0)
 #else
 #include "MIsc/FieldAccessor.h"
 #endif
@@ -86,36 +85,43 @@
 #include <assimp/GltfMaterial.h>
 #include <assimp/vrm/vrmmeta.h>
 
-#if	UE_VERSION_OLDER_THAN(4,23,0)
+#if UE_VERSION_OLDER_THAN(4, 23, 0)
 #define TRACE_CPUPROFILER_EVENT_SCOPE(a)
 #else
 #endif
 
-
 // tem
-namespace {
+namespace
+{
 	UPackage *s_vrm_package = nullptr;
 	FString baseFileName;
 }
 
-namespace {
-	class RenderControl {
+namespace
+{
+	class RenderControl
+	{
 		bool tmp = false;
+
 	public:
-		RenderControl() {
-#if	UE_VERSION_OLDER_THAN(5,0,0)
+		RenderControl()
+		{
+#if UE_VERSION_OLDER_THAN(5, 0, 0)
 			tmp = GUseThreadedRendering;
 
-			if (tmp) {
+			if (tmp)
+			{
 				StopRenderingThread();
 				GUseThreadedRendering = false;
 			}
 #else
 #endif
 		}
-		~RenderControl() {
-#if	UE_VERSION_OLDER_THAN(5,0,0)
-			if (tmp) {
+		~RenderControl()
+		{
+#if UE_VERSION_OLDER_THAN(5, 0, 0)
+			if (tmp)
+			{
 				GUseThreadedRendering = true;
 				StartRenderingThread();
 			}
@@ -126,41 +132,49 @@ namespace {
 
 }
 
-
-static std::string GetExtAndSetModelTypeLocal(std::string e, const uint8* pDataLocal, size_t sizeLocal) {
+static std::string GetExtAndSetModelTypeLocal(std::string e, const uint8 *pDataLocal, size_t sizeLocal)
+{
 	std::string e_tmp = e;
 	VRMConverter::Options::Get().ClearModelType();
 
-	if (e.compare("vrm") == 0 || e.compare("glb") == 0 || e.compare("gltf") == 0) {
+	if (e.compare("vrm") == 0 || e.compare("glb") == 0 || e.compare("gltf") == 0)
+	{
 
 		VRMConverter::Options::Get().SetVRM0Model(true);
 
-		extern bool VRMIsVRM10(const uint8 * pData, size_t size);
-		if (VRMIsVRM10(pDataLocal, sizeLocal)) {
+		extern bool VRMIsVRM10(const uint8 *pData, size_t size);
+		if (VRMIsVRM10(pDataLocal, sizeLocal))
+		{
 			VRMConverter::Options::Get().SetVRM10Model(true);
 		}
 	}
 
-	if (e.compare("vrma") == 0) {
+	if (e.compare("vrma") == 0)
+	{
 		VRMConverter::Options::Get().SetVRMAModel(true);
 		VRMConverter::Options::Get().SetNoMesh(true);
 		VRMConverter::Options::Get().SetVRM10Model(true);
 		e_tmp = "vrm";
 	}
 
-	if (e.compare("bvh") == 0) {
+	if (e.compare("bvh") == 0)
+	{
 		VRMConverter::Options::Get().SetBVHModel(true);
 	}
-	if (e.compare("pmx") == 0) {
+	if (e.compare("pmx") == 0)
+	{
 		VRMConverter::Options::Get().SetPMXModel(true);
 	}
 	return e_tmp;
 }
 
-static bool RemoveObject(UObject* u) {
-	if (u == nullptr) return true;
+static bool RemoveObject(UObject *u)
+{
+	if (u == nullptr)
+		return true;
 #if WITH_EDITOR
-
+	if (!GIsEditor)
+		return true;
 	u->ClearFlags(EObjectFlags::RF_Standalone);
 	u->SetFlags(EObjectFlags::RF_Public | RF_Transient);
 	u->ConditionalBeginDestroy();
@@ -168,20 +182,27 @@ static bool RemoveObject(UObject* u) {
 	return true;
 }
 
-static bool RemoveAssetList(UVrmAssetListObject *&assetList) {
-	if (assetList == nullptr) return false;
+static bool RemoveAssetList(UVrmAssetListObject *&assetList)
+{
+	if (assetList == nullptr)
+		return false;
 #if WITH_EDITOR
-
-	for (auto& t : assetList->Textures) {
+	if (!GIsEditor)
+		return true;
+	for (auto &t : assetList->Textures)
+	{
 		RemoveObject(t);
 	}
-	for (auto& t : assetList->Materials) {
+	for (auto &t : assetList->Materials)
+	{
 		RemoveObject(t);
 	}
-	for (auto& t : assetList->OutlineMaterials) {
+	for (auto &t : assetList->OutlineMaterials)
+	{
 		RemoveObject(t);
 	}
-	if (assetList->SkeletalMesh) {
+	if (assetList->SkeletalMesh)
+	{
 		RemoveObject(VRMGetSkeleton(assetList->SkeletalMesh));
 		RemoveObject(VRMGetPhysicsAsset(assetList->SkeletalMesh));
 		RemoveObject(assetList->SkeletalMesh);
@@ -198,90 +219,100 @@ static bool RemoveAssetList(UVrmAssetListObject *&assetList) {
 	return true;
 }
 
-static bool RenewPkgAndSaveObject(UObject *u, bool bSave) {
+static bool RenewPkgAndSaveObject(UObject *u, bool bSave)
+{
 #if WITH_EDITOR
-	if (u == nullptr) return false;
+	if (!GIsEditor)
+		return true;
+	if (u == nullptr)
+		return false;
 
-	//if (VRMConverter::Options::Get().IsSingleUAssetFile()) {
-		if (VRMConverter::IsImportMode()) {
-			u->PostEditChange();
-		}
-		if (bSave) {
-			s_vrm_package->MarkPackageDirty();
-			FAssetRegistryModule::AssetCreated(u);
-#if	UE_VERSION_OLDER_THAN(5,0,0)
-			bool bSaved = UPackage::SavePackage(s_vrm_package, u, EObjectFlags::RF_Standalone, *(s_vrm_package->GetName()), GError, nullptr, true, true, SAVE_NoError);
-#elif UE_VERSION_OLDER_THAN(5,1,0)
-			FSavePackageArgs SaveArgs = { nullptr, EObjectFlags::RF_Standalone, SAVE_NoError, true,
-					true, true, FDateTime::MinValue(), GError };
-			bool bSaved = UPackage::SavePackage(s_vrm_package, u, *(s_vrm_package->GetName()), SaveArgs);
-#else
-			FSavePackageArgs SaveArgs = { nullptr, nullptr, EObjectFlags::RF_Standalone, SAVE_NoError, true,
-					true, true, FDateTime::MinValue(), GError };
-			bool bSaved = UPackage::SavePackage(s_vrm_package, u, *(s_vrm_package->GetName()), SaveArgs);
-#endif
-		}
-		/*
-	}else{
-		FString objPath = u->GetPathName();
-		if (objPath.IsEmpty()) return false;
-
-		const FString PackageName = FPackageName::ObjectPathToPackageName(objPath);
-		const FString PackagePath = FPaths::GetPath(PackageName);
-		const FString AssetName = FPaths::GetBaseFilename(PackageName);
-
-		FString NewPackageName = FPaths::Combine(*PackagePath, *(u->GetFName().ToString()));
-		UPackage* Pkg = CreatePackage(nullptr, *NewPackageName);
-		u->Rename(nullptr, Pkg);
-
-		if (VRMConverter::IsImportMode()) {
-			u->PostEditChange();
-		}
-
-		if (bSave) {
-			UPackage::SavePackage(Pkg, u, RF_Standalone,
-				*FPackageName::LongPackageNameToFilename(NewPackageName, FPackageName::GetAssetPackageExtension()),
-				GError, nullptr, false, true, SAVE_NoError);
-		}
+	// if (VRMConverter::Options::Get().IsSingleUAssetFile()) {
+	if (VRMConverter::IsImportMode())
+	{
+		u->PostEditChange();
 	}
-	*/
+	if (bSave)
+	{
+		s_vrm_package->MarkPackageDirty();
+		FAssetRegistryModule::AssetCreated(u);
+#if UE_VERSION_OLDER_THAN(5, 0, 0)
+		bool bSaved = UPackage::SavePackage(s_vrm_package, u, EObjectFlags::RF_Standalone, *(s_vrm_package->GetName()), GError, nullptr, true, true, SAVE_NoError);
+#elif UE_VERSION_OLDER_THAN(5, 1, 0)
+		FSavePackageArgs SaveArgs = {nullptr, EObjectFlags::RF_Standalone, SAVE_NoError, true,
+									 true, true, FDateTime::MinValue(), GError};
+		bool bSaved = UPackage::SavePackage(s_vrm_package, u, *(s_vrm_package->GetName()), SaveArgs);
+#else
+		FSavePackageArgs SaveArgs = {nullptr, nullptr, EObjectFlags::RF_Standalone, SAVE_NoError, true,
+									 true, true, FDateTime::MinValue(), GError};
+		bool bSaved = UPackage::SavePackage(s_vrm_package, u, *(s_vrm_package->GetName()), SaveArgs);
+#endif
+	}
+	/*
+}else{
+	FString objPath = u->GetPathName();
+	if (objPath.IsEmpty()) return false;
+
+	const FString PackageName = FPackageName::ObjectPathToPackageName(objPath);
+	const FString PackagePath = FPaths::GetPath(PackageName);
+	const FString AssetName = FPaths::GetBaseFilename(PackageName);
+
+	FString NewPackageName = FPaths::Combine(*PackagePath, *(u->GetFName().ToString()));
+	UPackage* Pkg = CreatePackage(nullptr, *NewPackageName);
+	u->Rename(nullptr, Pkg);
+
+	if (VRMConverter::IsImportMode()) {
+		u->PostEditChange();
+	}
+
+	if (bSave) {
+		UPackage::SavePackage(Pkg, u, RF_Standalone,
+			*FPackageName::LongPackageNameToFilename(NewPackageName, FPackageName::GetAssetPackageExtension()),
+			GError, nullptr, false, true, SAVE_NoError);
+	}
+}
+*/
 
 #endif
 	return true;
 }
 
-static UTexture2D* LocalGetTexture(const aiScene* mScenePtr, int texIndex) {
+static UTexture2D *LocalGetTexture(const aiScene *mScenePtr, int texIndex)
+{
 
-	if (texIndex < 0 || texIndex >= (int)mScenePtr->mNumTextures) {
+	if (texIndex < 0 || texIndex >= (int)mScenePtr->mNumTextures)
+	{
 		return nullptr;
 	}
 
-	IImageWrapperModule& ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
+	IImageWrapperModule &ImageWrapperModule = FModuleManager::LoadModuleChecked<IImageWrapperModule>(FName("ImageWrapper"));
 	TSharedPtr<IImageWrapper> ImageWrapper;
 	// Note: PNG format.  Other formats are supported
 	ImageWrapper = ImageWrapperModule.CreateImageWrapper(EImageFormat::PNG);
 
-	auto& t = *mScenePtr->mTextures[texIndex];
+	auto &t = *mScenePtr->mTextures[texIndex];
 	int Width = t.mWidth;
 	int Height = t.mHeight;
-#if	UE_VERSION_OLDER_THAN(4,25,0)
+#if UE_VERSION_OLDER_THAN(4, 25, 0)
 #else
 	TArray<uint8> RawData;
 #endif
-	const TArray<uint8>* pRawData = nullptr;
+	const TArray<uint8> *pRawData = nullptr;
 
-	if (Height == 0) {
-		if (ImageWrapper->SetCompressed(t.pcData, t.mWidth)) {
-
+	if (Height == 0)
+	{
+		if (ImageWrapper->SetCompressed(t.pcData, t.mWidth))
+		{
 		}
 		Width = ImageWrapper->GetWidth();
 		Height = ImageWrapper->GetHeight();
 
-		if (Width == 0 || Height == 0) {
+		if (Width == 0 || Height == 0)
+		{
 			return nullptr;
 		}
 
-#if	UE_VERSION_OLDER_THAN(4,25,0)
+#if UE_VERSION_OLDER_THAN(4, 25, 0)
 		ImageWrapper->GetRaw(ERGBFormat::BGRA, 8, pRawData);
 #else
 		ImageWrapper->GetRaw(ERGBFormat::BGRA, 8, RawData);
@@ -291,18 +322,20 @@ static UTexture2D* LocalGetTexture(const aiScene* mScenePtr, int texIndex) {
 	FString baseName;
 
 	auto *NewTexture2D = VRMLoaderUtil::CreateTexture(Width, Height, FString(TEXT("T_")) + baseName, GetTransientPackage());
-	//UTexture2D* NewTexture2D = _CreateTransient(Width, Height, PF_B8G8R8A8, t.mFilename.C_Str());
+	// UTexture2D* NewTexture2D = _CreateTransient(Width, Height, PF_B8G8R8A8, t.mFilename.C_Str());
 
 	// Fill in the base mip for the texture we created
-	uint8* MipData = (uint8*)GetPlatformData(NewTexture2D)->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
-	if (pRawData) {
+	uint8 *MipData = (uint8 *)GetPlatformData(NewTexture2D)->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
+	if (pRawData)
+	{
 		FMemory::Memcpy(MipData, pRawData->GetData(), pRawData->Num());
 	}
-	else {
+	else
+	{
 		for (int32 y = 0; y < Height; y++)
 		{
-			const aiTexel* c = &(t.pcData[y * Width]);
-			uint8* DestPtr = &MipData[y * Width * sizeof(FColor)];
+			const aiTexel *c = &(t.pcData[y * Width]);
+			uint8 *DestPtr = &MipData[y * Width * sizeof(FColor)];
 			for (int32 x = 0; x < Width; x++)
 			{
 				*DestPtr++ = c->b;
@@ -316,7 +349,7 @@ static UTexture2D* LocalGetTexture(const aiScene* mScenePtr, int texIndex) {
 	GetPlatformData(NewTexture2D)->Mips[0].BulkData.Unlock();
 
 	// Set options
-	NewTexture2D->SRGB = true;// bUseSRGB;
+	NewTexture2D->SRGB = true; // bUseSRGB;
 	NewTexture2D->CompressionSettings = TC_Default;
 	NewTexture2D->AddressX = TA_Wrap;
 	NewTexture2D->AddressY = TA_Wrap;
@@ -326,110 +359,127 @@ static UTexture2D* LocalGetTexture(const aiScene* mScenePtr, int texIndex) {
 	NewTexture2D->DeferCompression = true;
 
 	// nomipmap for tmporary thumbnail
-	//if (VRMConverter::Options::Get().IsMipmapGenerateMode()) {
+	// if (VRMConverter::Options::Get().IsMipmapGenerateMode()) {
 	//	NewTexture2D->MipGenSettings = TMGS_FromTextureGroup;
 	//} else {
 	NewTexture2D->MipGenSettings = TMGS_NoMipmaps;
 	//}
 	NewTexture2D->Source.Init(Width, Height, 1, 1, ETextureSourceFormat::TSF_BGRA8, pRawData->GetData());
-	//NewTexture2D->Source.Compress();
+	// NewTexture2D->Source.Compress();
 #endif
 
-// Update the remote texture data
+	// Update the remote texture data
 	NewTexture2D->UpdateResource();
 #if WITH_EDITOR
-	NewTexture2D->PostEditChange();
+	if (GIsEditor)
+		NewTexture2D->PostEditChange();
 #endif
 	return NewTexture2D;
 }
 
-static void UpdateProgress(int prog) {
+static void UpdateProgress(int prog)
+{
 #if WITH_EDITOR
-	GWarn->UpdateProgress( prog, 100 );
+	if (GIsEditor)
+		GWarn->UpdateProgress(prog, 100);
 #endif
 }
 
 ////
 
-static void ReTransformHumanoidBone(USkeleton *targetHumanoidSkeleton, const UVrmMetaObject *meta, const USkeleton *displaySkeleton) {
+static void ReTransformHumanoidBone(USkeleton *targetHumanoidSkeleton, const UVrmMetaObject *meta, const USkeleton *displaySkeleton)
+{
 
-	FReferenceSkeleton &ReferenceSkeleton = const_cast<FReferenceSkeleton&>(targetHumanoidSkeleton->GetReferenceSkeleton());
+	FReferenceSkeleton &ReferenceSkeleton = const_cast<FReferenceSkeleton &>(targetHumanoidSkeleton->GetReferenceSkeleton());
 	auto &allbone = const_cast<TArray<FMeshBoneInfo> &>(targetHumanoidSkeleton->GetReferenceSkeleton().GetRawRefBoneInfo());
 
-	//auto &humanoidTrans = humanoidSkeleton->GetReferenceSkeleton().GetRawRefBonePose();
+	// auto &humanoidTrans = humanoidSkeleton->GetReferenceSkeleton().GetRawRefBonePose();
 
 	FReferenceSkeletonModifier RefSkelModifier(ReferenceSkeleton, targetHumanoidSkeleton);
 
-	for (int ind_target = 0; ind_target < targetHumanoidSkeleton->GetReferenceSkeleton().GetRawBoneNum(); ++ind_target) {
+	for (int ind_target = 0; ind_target < targetHumanoidSkeleton->GetReferenceSkeleton().GetRawBoneNum(); ++ind_target)
+	{
 		FTransform t;
 		t.SetIdentity();
 		RefSkelModifier.UpdateRefPoseTransform(ind_target, t);
 
 		auto boneName = ReferenceSkeleton.GetBoneName(ind_target);
-		//auto &info = targetHumanoidSkeleton->GetReferenceSkeleton().GetRefBoneInfo();
-		//auto &a = info[ind_target];
+		// auto &info = targetHumanoidSkeleton->GetReferenceSkeleton().GetRefBoneInfo();
+		// auto &a = info[ind_target];
 
 		int32 ind_disp = 0;
 
-		if (meta) {
+		if (meta)
+		{
 			auto p = meta->humanoidBoneTable.Find(boneName.ToString());
-			if (p == nullptr) {
+			if (p == nullptr)
+			{
 				continue;
 			}
 			ind_disp = displaySkeleton->GetReferenceSkeleton().FindBoneIndex(**p);
-		}else {
+		}
+		else
+		{
 			ind_disp = displaySkeleton->GetReferenceSkeleton().FindBoneIndex(boneName);
 		}
 
-		if (ind_disp == INDEX_NONE) {
+		if (ind_disp == INDEX_NONE)
+		{
 			continue;
 		}
 		t = displaySkeleton->GetReferenceSkeleton().GetRefBonePose()[ind_disp];
 
 		auto parent = displaySkeleton->GetReferenceSkeleton().GetParentIndex(ind_disp);
-		while (parent != INDEX_NONE) {
+		while (parent != INDEX_NONE)
+		{
 
 			auto s = displaySkeleton->GetReferenceSkeleton().GetBoneName(parent);
 
-			if (meta) {
-				if (meta->humanoidBoneTable.FindKey(s.ToString()) != nullptr) {
+			if (meta)
+			{
+				if (meta->humanoidBoneTable.FindKey(s.ToString()) != nullptr)
+				{
 					// parent == humanoidBone
 					break;
 				}
 			}
-			//t.SetLocation(t.GetLocation() + displaySkeleton->GetReferenceSkeleton().GetRefBonePose()[parent].GetLocation());;
+			// t.SetLocation(t.GetLocation() + displaySkeleton->GetReferenceSkeleton().GetRefBonePose()[parent].GetLocation());;
 			parent = displaySkeleton->GetReferenceSkeleton().GetParentIndex(parent);
 		}
 		RefSkelModifier.UpdateRefPoseTransform(ind_target, t);
 	}
 
 	ReferenceSkeleton.RebuildRefSkeleton(targetHumanoidSkeleton, true);
-
 }
 
-bool ULoaderBPFunctionLibrary::VRMReTransformHumanoidBone(USkeletalMeshComponent *targetHumanoidSkeleton, const UVrmMetaObject *meta, const USkeletalMeshComponent *displaySkeleton) {
+bool ULoaderBPFunctionLibrary::VRMReTransformHumanoidBone(USkeletalMeshComponent *targetHumanoidSkeleton, const UVrmMetaObject *meta, const USkeletalMeshComponent *displaySkeleton)
+{
 
-	if (targetHumanoidSkeleton == nullptr) return false;
-	if (VRMGetSkinnedAsset(targetHumanoidSkeleton) == nullptr) return false;
+	if (targetHumanoidSkeleton == nullptr)
+		return false;
+	if (VRMGetSkinnedAsset(targetHumanoidSkeleton) == nullptr)
+		return false;
 
-	if (displaySkeleton == nullptr) return false;
-	if (VRMGetSkinnedAsset(displaySkeleton) == nullptr) return false;
+	if (displaySkeleton == nullptr)
+		return false;
+	if (VRMGetSkinnedAsset(displaySkeleton) == nullptr)
+		return false;
 
 	// no meta. use default name.
-	//if (meta == nullptr) return false;
+	// if (meta == nullptr) return false;
 
-	ReTransformHumanoidBone(VRMGetSkeleton( VRMGetSkinnedAsset(targetHumanoidSkeleton) ), meta, VRMGetSkeleton( VRMGetSkinnedAsset(displaySkeleton) ));
+	ReTransformHumanoidBone(VRMGetSkeleton(VRMGetSkinnedAsset(targetHumanoidSkeleton)), meta, VRMGetSkeleton(VRMGetSkinnedAsset(displaySkeleton)));
 	auto *sk = VRMGetSkinnedAsset(targetHumanoidSkeleton);
 	auto *k = VRMGetSkeleton(sk);
 
 	VRMSetRefSkeleton(sk, k->GetReferenceSkeleton());
-	//sk->RefSkeleton.RebuildNameToIndexMap();
+	// sk->RefSkeleton.RebuildNameToIndexMap();
 
-	//sk->RefSkeleton.RebuildRefSkeleton(sk->Skeleton, true);
-	//sk->Proc();
+	// sk->RefSkeleton.RebuildRefSkeleton(sk->Skeleton, true);
+	// sk->Proc();
 
-	//out->RefSkeleton = sk->RefSkeleton;
-	
+	// out->RefSkeleton = sk->RefSkeleton;
+
 	VRMSetSkeleton(sk, k);
 	VRMSetRefSkeleton(sk, k->GetReferenceSkeleton());
 
@@ -437,46 +487,55 @@ bool ULoaderBPFunctionLibrary::VRMReTransformHumanoidBone(USkeletalMeshComponent
 	sk->CalculateExtendedBounds();
 
 #if WITH_EDITORONLY_DATA
-	sk->ConvertLegacyLODScreenSize();
-#if	UE_VERSION_OLDER_THAN(4,20,0)
+	if (GIsEditor)
+	{
+		sk->ConvertLegacyLODScreenSize();
+#if UE_VERSION_OLDER_THAN(4, 20, 0)
 #else
-	sk->UpdateGenerateUpToData();
+		sk->UpdateGenerateUpToData();
 #endif
+	}
+
 #endif
 
 #if WITH_EDITORONLY_DATA
-	k->SetPreviewMesh(sk);
+	if (GIsEditor)
+	{
+		k->SetPreviewMesh(sk);
+	}
 #endif
 	k->RecreateBoneTree(sk);
 
 	return true;
 }
 
-
-
-void ULoaderBPFunctionLibrary::SetImportMode(bool bIm, class UPackage *p) {
+void ULoaderBPFunctionLibrary::SetImportMode(bool bIm, class UPackage *p)
+{
 	VRMConverter::SetImportMode(bIm);
 	s_vrm_package = p;
 }
 
-namespace {
+namespace
+{
 #if PLATFORM_WINDOWS
-	std::string utf_16_to_shift_jis(const std::wstring& str) {
+	std::string utf_16_to_shift_jis(const std::wstring &str)
+	{
 		static_assert(sizeof(wchar_t) == 2, "this function is windows only");
-		const int len = ::WideCharToMultiByte(932/*CP_ACP*/, 0, str.c_str(), -1, nullptr, 0, nullptr, nullptr);
+		const int len = ::WideCharToMultiByte(932 /*CP_ACP*/, 0, str.c_str(), -1, nullptr, 0, nullptr, nullptr);
 		std::string re(len * 2, '\0');
-		if (!::WideCharToMultiByte(CP_ACP, 0, str.c_str(), -1, &re[0], len, nullptr, nullptr)) {
+		if (!::WideCharToMultiByte(CP_ACP, 0, str.c_str(), -1, &re[0], len, nullptr, nullptr))
+		{
 			const auto ec = ::GetLastError();
 			switch (ec)
 			{
 			case ERROR_INSUFFICIENT_BUFFER:
-				//throw std::runtime_error("in function utf_16_to_shift_jis, WideCharToMultiByte fail. cause: ERROR_INSUFFICIENT_BUFFER"); break;
+				// throw std::runtime_error("in function utf_16_to_shift_jis, WideCharToMultiByte fail. cause: ERROR_INSUFFICIENT_BUFFER"); break;
 			case ERROR_INVALID_FLAGS:
-				//throw std::runtime_error("in function utf_16_to_shift_jis, WideCharToMultiByte fail. cause: ERROR_INVALID_FLAGS"); break;
+				// throw std::runtime_error("in function utf_16_to_shift_jis, WideCharToMultiByte fail. cause: ERROR_INVALID_FLAGS"); break;
 			case ERROR_INVALID_PARAMETER:
-				//throw std::runtime_error("in function utf_16_to_shift_jis, WideCharToMultiByte fail. cause: ERROR_INVALID_PARAMETER"); break;
+				// throw std::runtime_error("in function utf_16_to_shift_jis, WideCharToMultiByte fail. cause: ERROR_INVALID_PARAMETER"); break;
 			default:
-				//throw std::runtime_error("in function utf_16_to_shift_jis, WideCharToMultiByte fail. cause: unknown(" + std::to_string(ec) + ')'); break;
+				// throw std::runtime_error("in function utf_16_to_shift_jis, WideCharToMultiByte fail. cause: unknown(" + std::to_string(ec) + ')'); break;
 				break;
 			}
 		}
@@ -488,7 +547,8 @@ namespace {
 #endif
 }
 
-void ULoaderBPFunctionLibrary::GetVRMMeta(FString filepath, UVrmLicenseObject*& a, UVrm1LicenseObject*& b) {
+void ULoaderBPFunctionLibrary::GetVRMMeta(FString filepath, UVrmLicenseObject *&a, UVrm1LicenseObject *&b)
+{
 
 	UE_LOG(LogVRM4ULoader, Log, TEXT("GetVRMMeta:OrigFileName=%s"), *filepath);
 
@@ -508,7 +568,8 @@ void ULoaderBPFunctionLibrary::GetVRMMeta(FString filepath, UVrmLicenseObject*& 
 	VRMConverter vc;
 	{
 		TArray<uint8> Res;
-		if (FFileHelper::LoadFileToArray(Res, *filepath)) {
+		if (FFileHelper::LoadFileToArray(Res, *filepath))
+		{
 		}
 		UE_LOG(LogVRM4ULoader, Log, TEXT("GetVRMMeta: filesize=%d"), Res.Num());
 
@@ -522,149 +583,171 @@ void ULoaderBPFunctionLibrary::GetVRMMeta(FString filepath, UVrmLicenseObject*& 
 		e = GetExtAndSetModelTypeLocal(e, Res.GetData(), Res.Num());
 
 		mScenePtr = mImporter.ReadFileFromMemory(Res.GetData(), Res.Num(),
-			aiProcess_Triangulate | aiProcess_MakeLeftHanded | aiProcess_CalcTangentSpace | aiProcess_GenSmoothNormals | aiProcess_OptimizeMeshes,
-			e.c_str());
+												 aiProcess_Triangulate | aiProcess_MakeLeftHanded | aiProcess_CalcTangentSpace | aiProcess_GenSmoothNormals | aiProcess_OptimizeMeshes,
+												 e.c_str());
 
 		UE_LOG(LogVRM4ULoader, Log, TEXT("GetVRMMeta: mScenePtr=%p"), mScenePtr);
 
-		if (mScenePtr == nullptr) {
+		if (mScenePtr == nullptr)
+		{
 			return;
 		}
 
-		//UE_LOG(LogVRM4ULoader, Log, TEXT("VRM:(%3.3lf secs) ReadFileFromMemory"), FPlatformTime::Seconds() - StartTime);
-
+		// UE_LOG(LogVRM4ULoader, Log, TEXT("VRM:(%3.3lf secs) ReadFileFromMemory"), FPlatformTime::Seconds() - StartTime);
 
 		{
 			// vrm version check
 
-			extern bool VRMIsVRM10(const uint8 * pData, size_t size);
-			if (VRMIsVRM10(Res.GetData(), Res.Num())) {
+			extern bool VRMIsVRM10(const uint8 *pData, size_t size);
+			if (VRMIsVRM10(Res.GetData(), Res.Num()))
+			{
 				VRMConverter::Options::Get().SetVRM10Model(true);
 				vc.Init(Res.GetData(), Res.Num(), nullptr);
 			}
 		}
 	}
 
-	UTexture2D* NewTexture2D = nullptr;
+	UTexture2D *NewTexture2D = nullptr;
 
-	if (VRMConverter::Options::Get().IsVRM10Model()) {
+	if (VRMConverter::Options::Get().IsVRM10Model())
+	{
 		int texIndex = vc.GetThumbnailTextureIndex();
 		NewTexture2D = LocalGetTexture(mScenePtr, texIndex);
-	}else{
-		VRM::VRMMetadata* meta = reinterpret_cast<VRM::VRMMetadata*>(mScenePtr->mVRMMeta);
+	}
+	else
+	{
+		VRM::VRMMetadata *meta = reinterpret_cast<VRM::VRMMetadata *>(mScenePtr->mVRMMeta);
 
-		if (meta) {
-			for (int i = 0; i < meta->license.licensePairNum; ++i) {
+		if (meta)
+		{
+			for (int i = 0; i < meta->license.licensePairNum; ++i)
+			{
 
-				auto& p = meta->license.licensePair[i];
+				auto &p = meta->license.licensePair[i];
 
-				if (FString(TEXT("texture")) != p.Key.C_Str()) {
+				if (FString(TEXT("texture")) != p.Key.C_Str())
+				{
 					continue;
 				}
 
 				unsigned int texIndex = FCString::Atoi(*FString(p.Value.C_Str()));
 				NewTexture2D = LocalGetTexture(mScenePtr, texIndex);
-				if (NewTexture2D) {
+				if (NewTexture2D)
+				{
 					break;
 				}
 			}
 		}
 	}
 
-	UVrmLicenseObject* m = nullptr;
-	UVrm1LicenseObject* m1 = nullptr;
+	UVrmLicenseObject *m = nullptr;
+	UVrm1LicenseObject *m1 = nullptr;
 	vc.GetVRMMeta(mScenePtr, m, m1);
 
-	if (m) m->thumbnail = NewTexture2D;
-	if (m1) m1->thumbnail = NewTexture2D;
+	if (m)
+		m->thumbnail = NewTexture2D;
+	if (m1)
+		m1->thumbnail = NewTexture2D;
 
 	a = m;
 	b = m1;
 }
 
-bool ULoaderBPFunctionLibrary::VRMSetLoadMaterialType(EVRMImportMaterialType type) {
+bool ULoaderBPFunctionLibrary::VRMSetLoadMaterialType(EVRMImportMaterialType type)
+{
 	VRMConverter::Options::Get().SetMaterialType(type);
 	return true;
 }
 
-bool ULoaderBPFunctionLibrary::LoadVRMFile(const UVrmAssetListObject *InVrmAsset, UVrmAssetListObject *&OutVrmAsset, const FString filepath, const FImportOptionData &OptionForRuntimeLoad) {
+bool ULoaderBPFunctionLibrary::LoadVRMFile(const UVrmAssetListObject *InVrmAsset, UVrmAssetListObject *&OutVrmAsset, const FString filepath, const FImportOptionData &OptionForRuntimeLoad)
+{
 	VRMConverter::Options::Get().SetVrmOption(&OptionForRuntimeLoad);
 	OutVrmAsset = nullptr;
 
 	return LoadVRMFileLocal(InVrmAsset, OutVrmAsset, filepath);
 }
 
-void ULoaderBPFunctionLibrary::LoadVRMFileAsync(const UObject* WorldContextObject, const class UVrmAssetListObject* InVrmAsset, class UVrmAssetListObject*& OutVrmAsset, const FString filepath, const FImportOptionData& OptionForRuntimeLoad, struct FLatentActionInfo LatentInfo) {
+void ULoaderBPFunctionLibrary::LoadVRMFileAsync(const UObject *WorldContextObject, const class UVrmAssetListObject *InVrmAsset, class UVrmAssetListObject *&OutVrmAsset, const FString filepath, const FImportOptionData &OptionForRuntimeLoad, struct FLatentActionInfo LatentInfo)
+{
 	VRMConverter::Options::Get().SetVrmOption(&OptionForRuntimeLoad);
 	OutVrmAsset = nullptr;
 
-	if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
+	if (UWorld *World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
 	{
-		FLatentActionManager& LatentActionManager = World->GetLatentActionManager();
+		FLatentActionManager &LatentActionManager = World->GetLatentActionManager();
 		if (LatentActionManager.FindExistingAction<FVrmAsyncLoadAction>(LatentInfo.CallbackTarget, LatentInfo.UUID) == NULL)
 		{
-			FVrmAsyncLoadActionParam p = { InVrmAsset, OutVrmAsset, OptionForRuntimeLoad, filepath, nullptr, 0 };
+			FVrmAsyncLoadActionParam p = {InVrmAsset, OutVrmAsset, OptionForRuntimeLoad, filepath, nullptr, 0};
 			LatentActionManager.AddNewAction(LatentInfo.CallbackTarget, LatentInfo.UUID, new FVrmAsyncLoadAction(LatentInfo, p));
 		}
 	}
 	return;
 }
 
-
-bool ULoaderBPFunctionLibrary::LoadVRMFileLocal(const UVrmAssetListObject* InVrmAsset, UVrmAssetListObject*& OutVrmAsset, const FString filepath) {
+bool ULoaderBPFunctionLibrary::LoadVRMFileLocal(const UVrmAssetListObject *InVrmAsset, UVrmAssetListObject *&OutVrmAsset, const FString filepath)
+{
 	TArray<uint8> Res;
-	if (FFileHelper::LoadFileToArray(Res, *filepath)) {
+	if (FFileHelper::LoadFileToArray(Res, *filepath))
+	{
 	}
 
 	return LoadVRMFileFromMemory(InVrmAsset, OutVrmAsset, filepath, Res.GetData(), Res.Num());
 }
 
-bool ULoaderBPFunctionLibrary::LoadVRMFileFromMemoryDefaultOption(UVrmAssetListObject*& OutVrmAsset, const FString filepath, const uint8* pData, size_t dataSize) {
-#if	UE_VERSION_OLDER_THAN(5,0,0)
+bool ULoaderBPFunctionLibrary::LoadVRMFileFromMemoryDefaultOption(UVrmAssetListObject *&OutVrmAsset, const FString filepath, const uint8 *pData, size_t dataSize)
+{
+#if UE_VERSION_OLDER_THAN(5, 0, 0)
 	TAssetPtr<UClass> c;
 #else
 	TSoftObjectPtr<UClass> c;
 #endif
-	if (c == nullptr) {
+	if (c == nullptr)
+	{
 		FSoftObjectPath r(TEXT("/VRM4U/VrmAssetListObjectBP.VrmAssetListObjectBP"));
-		UObject* u = r.TryLoad();
-		if (u) {
-			c = (UClass*)(Cast<UBlueprint>(u)->GeneratedClass);
+		UObject *u = r.TryLoad();
+		if (u)
+		{
+			c = (UClass *)(Cast<UBlueprint>(u)->GeneratedClass);
 		}
 	}
 
-	if (c == nullptr) {
+	if (c == nullptr)
+	{
 		c = UVrmAssetListObject::StaticClass();
 	}
-#if	UE_VERSION_OLDER_THAN(5,0,0)
-	TAssetPtr<UVrmAssetListObject> m = NewObject<UVrmAssetListObject>((UObject*)GetTransientPackage(), c.Get());
+#if UE_VERSION_OLDER_THAN(5, 0, 0)
+	TAssetPtr<UVrmAssetListObject> m = NewObject<UVrmAssetListObject>((UObject *)GetTransientPackage(), c.Get());
 #else
-	TSoftObjectPtr<UVrmAssetListObject> m = NewObject<UVrmAssetListObject>((UObject*)GetTransientPackage(), c.Get());
+	TSoftObjectPtr<UVrmAssetListObject> m = NewObject<UVrmAssetListObject>((UObject *)GetTransientPackage(), c.Get());
 #endif
 
 	return LoadVRMFileFromMemory(m.Get(), OutVrmAsset, filepath, pData, dataSize);
 }
 
-bool ULoaderBPFunctionLibrary::LoadVRMFileFromMemory(const UVrmAssetListObject *InVrmAsset, UVrmAssetListObject *&OutVrmAsset, const FString filepath, const uint8 *pFileDataData, size_t dataSize) {
+bool ULoaderBPFunctionLibrary::LoadVRMFileFromMemory(const UVrmAssetListObject *InVrmAsset, UVrmAssetListObject *&OutVrmAsset, const FString filepath, const uint8 *pFileDataData, size_t dataSize)
+{
 	TRACE_CPUPROFILER_EVENT_SCOPE(TEXT("LoadVRMFileFromMemory"))
 
 	OutVrmAsset = nullptr;
 	RenderControl _dummy_control;
 
-	if (InVrmAsset == nullptr) {
+	if (InVrmAsset == nullptr)
+	{
 		return false;
 	}
 
 	Assimp::Importer mImporter;
 	mImporter.SetPropertyBool(AI_CONFIG_IMPORT_REMOVE_EMPTY_BONES, false);
-	const aiScene* mScenePtr = nullptr; // delete by Assimp::Importer::~Importer
+	const aiScene *mScenePtr = nullptr; // delete by Assimp::Importer::~Importer
 
 	if (filepath.IsEmpty())
 	{
+		return false;
 	}
 
 	double StartTime = FPlatformTime::Seconds();
-	auto LogAndUpdate = [&](FString logname) {
+	auto LogAndUpdate = [&](FString logname)
+	{
 		UE_LOG(LogVRM4ULoader, Log, TEXT("VRM:(%02.2lf secs) %s"), FPlatformTime::Seconds() - StartTime, *logname);
 		StartTime = FPlatformTime::Seconds();
 	};
@@ -685,10 +768,11 @@ bool ULoaderBPFunctionLibrary::LoadVRMFileFromMemory(const UVrmAssetListObject *
 		e_imp = GetExtAndSetModelTypeLocal(e, pFileDataData, dataSize);
 
 		mScenePtr = mImporter.ReadFileFromMemory(pFileDataData, dataSize,
-			aiProcess_Triangulate | aiProcess_MakeLeftHanded | aiProcess_CalcTangentSpace | aiProcess_GenSmoothNormals | aiProcess_OptimizeMeshes | aiProcess_PopulateArmatureData,
-			e_imp.c_str());
+												 aiProcess_Triangulate | aiProcess_MakeLeftHanded | aiProcess_CalcTangentSpace | aiProcess_GenSmoothNormals | aiProcess_OptimizeMeshes | aiProcess_PopulateArmatureData,
+												 e_imp.c_str());
 
-		if (mScenePtr == nullptr) {
+		if (mScenePtr == nullptr)
+		{
 			std::string file;
 #if PLATFORM_WINDOWS
 			file = utf_16_to_shift_jis(*filepath);
@@ -712,36 +796,44 @@ bool ULoaderBPFunctionLibrary::LoadVRMFileFromMemory(const UVrmAssetListObject *
 	{
 		FString fullpath = FPaths::GameUserDeveloperDir() + TEXT("VRM/");
 		FString basepath = FPackageName::FilenameToLongPackageName(fullpath);
-		//FPackageName::RegisterMountPoint("/VRMImportData/", fullpath);
+		// FPackageName::RegisterMountPoint("/VRMImportData/", fullpath);
 
 		baseFileName = FPaths::GetBaseFilename(filepath);
 
-
-		if (s_vrm_package == nullptr) {
+		if (s_vrm_package == nullptr)
+		{
 			s_vrm_package = GetTransientPackage();
 		}
 	}
 	UVrmAssetListObject *out = OutVrmAsset;
-	if (OutVrmAsset == nullptr) {
-		if (s_vrm_package == GetTransientPackage()) {
+	if (OutVrmAsset == nullptr)
+	{
+		if (s_vrm_package == GetTransientPackage())
+		{
 			out = Cast<UVrmAssetListObject>(StaticDuplicateObject(InVrmAsset, s_vrm_package, NAME_None));
-		} else {
-			if (InVrmAsset->ReimportBase) {
+		}
+		else
+		{
+			if (InVrmAsset->ReimportBase)
+			{
 				out = InVrmAsset->ReimportBase;
 			}
-			else {
+			else
+			{
 				out = VRM4U_NewObject<UVrmAssetListObject>(s_vrm_package, *(FString(TEXT("VA_")) + VRMConverter::NormalizeFileName(baseFileName) + FString(TEXT("_VrmAssetList"))), EObjectFlags::RF_Public | EObjectFlags::RF_Standalone);
 			}
 			InVrmAsset->CopyMember(out);
 		}
 		OutVrmAsset = out;
 	}
-	if (out == nullptr) {
+	if (out == nullptr)
+	{
 		UE_LOG(LogVRM4ULoader, Warning, TEXT("VRM4U: no UVrmAssetListObject.\n"));
 		return false;
 	}
 
 #if WITH_EDITORONLY_DATA
+	if (GIsEditor)
 	{
 		out->AssetImportData = NewObject<UAssetImportData>(out, TEXT("AssetImportData"));
 		out->AssetImportData->Update(filepath);
@@ -769,8 +861,9 @@ bool ULoaderBPFunctionLibrary::LoadVRMFileFromMemory(const UVrmAssetListObject *
 		}
 		UpdateProgress(40);
 		{
-			bool r = vc.ConvertVrmMeta(out, mScenePtr, pFileDataData, dataSize);	// use texture.
-			if (VRMConverter::Options::Get().IsVRMModel() == true) {
+			bool r = vc.ConvertVrmMeta(out, mScenePtr, pFileDataData, dataSize); // use texture.
+			if (VRMConverter::Options::Get().IsVRMModel() == true)
+			{
 				ret &= r;
 			}
 		}
@@ -783,14 +876,15 @@ bool ULoaderBPFunctionLibrary::LoadVRMFileFromMemory(const UVrmAssetListObject *
 			LogAndUpdate(TEXT("ConvertModel"));
 		}
 
-		//meta rename
+		// meta rename
 		vc.ConvertVrmMetaPost(out, mScenePtr, pFileDataData, dataSize);
 
 		ret &= vc.ConvertRig(out);
 		LogAndUpdate(TEXT("ConvertRig"));
 		ret &= vc.ConvertIKRig(out);
 		LogAndUpdate(TEXT("ConvertIKRig"));
-		if (out->bSkipMorphTarget == false) {
+		if (out->bSkipMorphTarget == false)
+		{
 			ret &= vc.ConvertMorphTarget(out);
 			LogAndUpdate(TEXT("ConvertMorphTarget"));
 		}
@@ -801,7 +895,8 @@ bool ULoaderBPFunctionLibrary::LoadVRMFileFromMemory(const UVrmAssetListObject *
 		UpdateProgress(80);
 
 		OutVrmAsset->MeshReturnedData = nullptr;
-		if (ret == false) {
+		if (ret == false)
+		{
 			RemoveAssetList(out);
 			return false;
 		}
@@ -810,20 +905,22 @@ bool ULoaderBPFunctionLibrary::LoadVRMFileFromMemory(const UVrmAssetListObject *
 
 	VRMSetPhysicsAsset(out->VrmMetaObject->SkeletalMesh, nullptr);
 
-
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(TEXT("VRM Save"))
-		
+
 		LogAndUpdate(TEXT("BeginSave"));
 		bool b = out->bAssetSave;
 		RenewPkgAndSaveObject(out, b);
-		for (auto &t : out->Textures) {
+		for (auto &t : out->Textures)
+		{
 			RenewPkgAndSaveObject(t, b);
 		}
-		for (auto &t : out->Materials) {
+		for (auto &t : out->Materials)
+		{
 			RenewPkgAndSaveObject(t, b);
 		}
-		for (auto &t : out->OutlineMaterials) {
+		for (auto &t : out->OutlineMaterials)
+		{
 			RenewPkgAndSaveObject(t, b);
 		}
 		RenewPkgAndSaveObject(out->SkeletalMesh, b);
@@ -840,43 +937,48 @@ bool ULoaderBPFunctionLibrary::LoadVRMFileFromMemory(const UVrmAssetListObject *
 		LogAndUpdate(TEXT("Save"));
 	}
 
-	if (VRMConverter::IsImportMode()){
+	if (VRMConverter::IsImportMode())
+	{
 #if WITH_EDITOR
-#if	UE_VERSION_OLDER_THAN(5,0,0)
+		if (!GIsEditor)
+			return true;
+#if UE_VERSION_OLDER_THAN(5, 0, 0)
 #else
 
 		// refresh content browser
-		FContentBrowserModule& ContentBrowserModule = FModuleManager::Get().LoadModuleChecked<FContentBrowserModule>("ContentBrowser");
+		FContentBrowserModule &ContentBrowserModule = FModuleManager::Get().LoadModuleChecked<FContentBrowserModule>("ContentBrowser");
 		{
-			TArray<UObject*> a = { OutVrmAsset };
-			//ContentBrowserModule.Get().SyncBrowserToAssets(a);
+			TArray<UObject *> a = {OutVrmAsset};
+			// ContentBrowserModule.Get().SyncBrowserToAssets(a);
 		}
 		{
 			auto path = FPaths::GetPath(OutVrmAsset->GetPathName());
-			const TArray<FString> b = { path };
+			const TArray<FString> b = {path};
 			ContentBrowserModule.Get().SyncBrowserToFolders(b);
 			ContentBrowserModule.Get().SetSelectedPaths(b, true);
 		}
 
 #endif
 #endif
-
 	}
 	UpdateProgress(100);
 	return true;
 }
 
-
-bool ULoaderBPFunctionLibrary::CopyPhysicsAsset(USkeletalMesh *dstMesh, const USkeletalMesh *srcMesh, bool bResetCollisionTransform){
-	//GetTransientPackage
+bool ULoaderBPFunctionLibrary::CopyPhysicsAsset(USkeletalMesh *dstMesh, const USkeletalMesh *srcMesh, bool bResetCollisionTransform)
+{
+	// GetTransientPackage
 #if WITH_EDITOR
-#if	UE_VERSION_OLDER_THAN(5,4,0)
-	if (srcMesh == nullptr || dstMesh == nullptr) return false;
+	if (!GIsEditor)
+		return true;
+#if UE_VERSION_OLDER_THAN(5, 4, 0)
+	if (srcMesh == nullptr || dstMesh == nullptr)
+		return false;
 
-	auto  *srcPA = VRMGetPhysicsAsset(srcMesh);
+	auto *srcPA = VRMGetPhysicsAsset(srcMesh);
 	UPackage *pk = dstMesh->GetOutermost();
 
-	//FString name = srcPA->GetFName().ToString() + TEXT("_copy");
+	// FString name = srcPA->GetFName().ToString() + TEXT("_copy");
 	FString name = dstMesh->GetFName().ToString() + TEXT("_copy");
 	name.RemoveFromStart(TEXT("SK_"));
 	name = TEXT("PHYS_") + name;
@@ -887,19 +989,24 @@ bool ULoaderBPFunctionLibrary::CopyPhysicsAsset(USkeletalMesh *dstMesh, const US
 
 	TArray<FName> addBoneNameList;
 
-	for (auto &a : srcPA->SkeletalBodySetups) {
+	for (auto &a : srcPA->SkeletalBodySetups)
+	{
 		auto rigName = VRMGetSkeleton(srcMesh)->GetRigNodeNameFromBoneName(a->BoneName);
-		if (rigName.IsNone()) {
+		if (rigName.IsNone())
+		{
 			rigName = a->BoneName;
 		}
 
 		auto dstBoneName = VRMGetSkeleton(dstMesh)->GetRigBoneMapping(rigName);
-		if (dstBoneName.IsNone()) {
+		if (dstBoneName.IsNone())
+		{
 			dstBoneName = rigName;
 		}
 
-		if (rigName.IsNone()==false && dstBoneName.IsNone()==false){
-			if (addBoneNameList.Find(dstBoneName) < 0) {
+		if (rigName.IsNone() == false && dstBoneName.IsNone() == false)
+		{
+			if (addBoneNameList.Find(dstBoneName) < 0)
+			{
 				USkeletalBodySetup *bs = Cast<USkeletalBodySetup>(StaticDuplicateObject(a, dstPA, NAME_None));
 				bs->BoneName = dstBoneName;
 				addBoneNameList.Add(dstBoneName);
@@ -910,7 +1017,8 @@ bool ULoaderBPFunctionLibrary::CopyPhysicsAsset(USkeletalMesh *dstMesh, const US
 				while (srcIndex >= 0)
 				{
 					srcIndex = VRMGetRefSkeleton(srcMesh).GetParentIndex(srcIndex);
-					if (srcIndex < 0) {
+					if (srcIndex < 0)
+					{
 						break;
 					}
 					srcTrans = VRMGetRefSkeleton(srcMesh).GetRefBonePose()[srcIndex].GetRelativeTransform(srcTrans);
@@ -918,22 +1026,26 @@ bool ULoaderBPFunctionLibrary::CopyPhysicsAsset(USkeletalMesh *dstMesh, const US
 				while (dstIndex >= 0)
 				{
 					dstIndex = VRMGetRefSkeleton(dstMesh).GetParentIndex(dstIndex);
-					if (dstIndex < 0) {
+					if (dstIndex < 0)
+					{
 						break;
 					}
 					dstTrans = VRMGetRefSkeleton(dstMesh).GetRefBonePose()[dstIndex].GetRelativeTransform(dstTrans);
 				}
 
-				if (bResetCollisionTransform) {
-						for (int i = 0; i < bs->AggGeom.SphylElems.Num(); ++i) {
-						bs->AggGeom.SphylElems[i].Center.Set(0, 0, 0); 
-						bs->AggGeom.SphylElems[i].Rotation = FRotator::ZeroRotator; 
+				if (bResetCollisionTransform)
+				{
+					for (int i = 0; i < bs->AggGeom.SphylElems.Num(); ++i)
+					{
+						bs->AggGeom.SphylElems[i].Center.Set(0, 0, 0);
+						bs->AggGeom.SphylElems[i].Rotation = FRotator::ZeroRotator;
 
-						//bs->AggGeom.SphylElems[i].Center.X = 0;// -v.Z;
-						//bs->AggGeom.SphylElems[i].Center.Y = 0;// v.Y;
-						//bs->AggGeom.SphylElems[i].Center.Z = 0;// v.X;
+						// bs->AggGeom.SphylElems[i].Center.X = 0;// -v.Z;
+						// bs->AggGeom.SphylElems[i].Center.Y = 0;// v.Y;
+						// bs->AggGeom.SphylElems[i].Center.Z = 0;// v.X;
 					}
-					for (auto &b : bs->AggGeom.BoxElems) {
+					for (auto &b : bs->AggGeom.BoxElems)
+					{
 						b.Center.Set(0, 0, 0);
 						b.Rotation = FRotator::ZeroRotator;
 					}
@@ -942,7 +1054,8 @@ bool ULoaderBPFunctionLibrary::CopyPhysicsAsset(USkeletalMesh *dstMesh, const US
 			}
 		}
 	}
-	for (auto &a : srcPA->ConstraintSetup) {
+	for (auto &a : srcPA->ConstraintSetup)
+	{
 
 		FName n[3];
 		{
@@ -951,9 +1064,11 @@ bool ULoaderBPFunctionLibrary::CopyPhysicsAsset(USkeletalMesh *dstMesh, const US
 				a->DefaultInstance.ConstraintBone2,
 				a->DefaultInstance.JointName,
 			};
-			for (int i = 0; i < 3; ++i) {
+			for (int i = 0; i < 3; ++i)
+			{
 				n[i] = VRMGetSkeleton(srcMesh)->GetRigNodeNameFromBoneName(nn[i]);
-				if (n[i].IsNone()) {
+				if (n[i].IsNone())
+				{
 					n[i] = nn[i];
 				}
 			}
@@ -962,9 +1077,9 @@ bool ULoaderBPFunctionLibrary::CopyPhysicsAsset(USkeletalMesh *dstMesh, const US
 		const auto rigName2 = n[1];
 		const auto rigNameJ = n[2];
 
-		//const auto rigName1 = srcMesh->Skeleton->GetRigNodeNameFromBoneName(a->DefaultInstance.ConstraintBone1);
-		//const auto rigName2 = srcMesh->Skeleton->GetRigNodeNameFromBoneName(a->DefaultInstance.ConstraintBone2);
-		//const auto rigNameJ = srcMesh->Skeleton->GetRigNodeNameFromBoneName(a->DefaultInstance.JointName);
+		// const auto rigName1 = srcMesh->Skeleton->GetRigNodeNameFromBoneName(a->DefaultInstance.ConstraintBone1);
+		// const auto rigName2 = srcMesh->Skeleton->GetRigNodeNameFromBoneName(a->DefaultInstance.ConstraintBone2);
+		// const auto rigNameJ = srcMesh->Skeleton->GetRigNodeNameFromBoneName(a->DefaultInstance.JointName);
 
 		UPhysicsConstraintTemplate *ct = Cast<UPhysicsConstraintTemplate>(StaticDuplicateObject(a, dstPA, NAME_None));
 		ct->DefaultInstance.ConstraintBone1 = VRMGetSkeleton(dstMesh)->GetRigBoneMapping(rigName1);
@@ -975,20 +1090,24 @@ bool ULoaderBPFunctionLibrary::CopyPhysicsAsset(USkeletalMesh *dstMesh, const US
 			auto ind1 = VRMGetRefSkeleton(dstMesh).FindBoneIndex(ct->DefaultInstance.ConstraintBone1);
 			auto ind2 = VRMGetRefSkeleton(dstMesh).FindBoneIndex(ct->DefaultInstance.ConstraintBone2);
 
-			if (ind1 >= 0 && ind2 >= 0) {
+			if (ind1 >= 0 && ind2 >= 0)
+			{
 				auto t = VRMGetRefSkeleton(dstMesh).GetRefBonePose()[ind1];
-				while (1) {
+				while (1)
+				{
 					ind1 = VRMGetRefSkeleton(dstMesh).GetParentIndex(ind1);
-					if (ind1 == ind2) {
+					if (ind1 == ind2)
+					{
 						break;
 					}
-					if (ind1 < 0) {
+					if (ind1 < 0)
+					{
 						break;
 					}
 					auto v = VRMGetRefSkeleton(dstMesh).GetRefBonePose()[ind1].GetLocation();
 					t.SetLocation(t.GetLocation() + v);
 				}
-				//auto indParent = dstMesh->RefSkeleton.GetParentIndex(ind1);
+				// auto indParent = dstMesh->RefSkeleton.GetParentIndex(ind1);
 
 				ct->DefaultInstance.SetRefFrame(EConstraintFrame::Frame1, FTransform::Identity);
 				ct->DefaultInstance.SetRefFrame(EConstraintFrame::Frame2, t);
@@ -1021,18 +1140,20 @@ bool ULoaderBPFunctionLibrary::CopyPhysicsAsset(USkeletalMesh *dstMesh, const US
 	return true;
 }
 
-
-bool ULoaderBPFunctionLibrary::CopyVirtualBone(USkeletalMesh *dstMesh, const USkeletalMesh *srcMesh) {
-	if (dstMesh == nullptr || srcMesh == nullptr) {
+bool ULoaderBPFunctionLibrary::CopyVirtualBone(USkeletalMesh *dstMesh, const USkeletalMesh *srcMesh)
+{
+	if (dstMesh == nullptr || srcMesh == nullptr)
+	{
 		return false;
 	}
-#if	UE_VERSION_OLDER_THAN(5,4,0)
+#if UE_VERSION_OLDER_THAN(5, 4, 0)
 
 	// virtual bone
 	{
-		const TArray<FVirtualBone>& vTable = VRMGetSkeleton(srcMesh)->GetVirtualBones();
+		const TArray<FVirtualBone> &vTable = VRMGetSkeleton(srcMesh)->GetVirtualBones();
 
-		for (auto &t : vTable) {
+		for (auto &t : vTable)
+		{
 
 			int32 id[] = {
 				VRMGetRefSkeleton(dstMesh).FindBoneIndex(t.SourceBoneName),
@@ -1044,15 +1165,18 @@ bool ULoaderBPFunctionLibrary::CopyVirtualBone(USkeletalMesh *dstMesh, const USk
 			};
 
 #if WITH_EDITOR
+			if (GIsEditor)
 			{
 				auto t1 = VRMGetSkeleton(srcMesh)->GetRigNodeNameFromBoneName(t.SourceBoneName);
 				auto t2 = VRMGetSkeleton(srcMesh)->GetRigNodeNameFromBoneName(t.TargetBoneName);
 
-				if (t1.IsNone()==false && t2.IsNone()==false) {
+				if (t1.IsNone() == false && t2.IsNone() == false)
+				{
 					auto r1 = VRMGetSkeleton(dstMesh)->GetRigBoneMapping(t1);
 					auto r2 = VRMGetSkeleton(dstMesh)->GetRigBoneMapping(t2);
 
-					if (r1.IsNone()==false && r2.IsNone()==false) {
+					if (r1.IsNone() == false && r2.IsNone() == false)
+					{
 						id[0] = VRMGetRefSkeleton(dstMesh).FindBoneIndex(r1);
 						id[1] = VRMGetRefSkeleton(dstMesh).FindBoneIndex(r2);
 
@@ -1063,18 +1187,22 @@ bool ULoaderBPFunctionLibrary::CopyVirtualBone(USkeletalMesh *dstMesh, const USk
 			}
 #endif
 
-			if (id[0] < 0) {
+			if (id[0] < 0)
+			{
 				n[0] = VRMGetRefSkeleton(dstMesh).GetBoneName(0);
 			}
-			if (id[1] < 0) {
-				if (id[0] < 0) {
+			if (id[1] < 0)
+			{
+				if (id[0] < 0)
+				{
 					continue;
-					//n[1] = VRMGetRefSkeleton(dstMesh).GetBoneName(1);
+					// n[1] = VRMGetRefSkeleton(dstMesh).GetBoneName(1);
 				}
 			}
 
 			FName newName;
-			if (VRMGetSkeleton(dstMesh)->AddNewVirtualBone(n[0], n[1], newName)) {
+			if (VRMGetSkeleton(dstMesh)->AddNewVirtualBone(n[0], n[1], newName))
+			{
 				VRMGetSkeleton(dstMesh)->RenameVirtualBone(newName, t.VirtualBoneName);
 			}
 		}
@@ -1082,7 +1210,8 @@ bool ULoaderBPFunctionLibrary::CopyVirtualBone(USkeletalMesh *dstMesh, const USk
 
 	// socket
 	{
-		for (auto &t : VRMGetSkeleton(srcMesh)->Sockets) {
+		for (auto &t : VRMGetSkeleton(srcMesh)->Sockets)
+		{
 			int32 id = VRMGetRefSkeleton(dstMesh).FindBoneIndex(t->BoneName);
 
 			FName n = t->BoneName;
@@ -1091,13 +1220,16 @@ bool ULoaderBPFunctionLibrary::CopyVirtualBone(USkeletalMesh *dstMesh, const USk
 			FVector vec = t->RelativeLocation;
 
 #if WITH_EDITOR
+			if (GIsEditor)
 			{
 				auto t1 = VRMGetSkeleton(srcMesh)->GetRigNodeNameFromBoneName(t->BoneName);
 
-				if (t1.IsNone() == false) {
+				if (t1.IsNone() == false)
+				{
 					auto r1 = VRMGetSkeleton(dstMesh)->GetRigBoneMapping(t1);
 
-					if (r1.IsNone() == false) {
+					if (r1.IsNone() == false)
+					{
 						id = VRMGetRefSkeleton(dstMesh).FindBoneIndex(r1);
 						n = r1;
 					}
@@ -1105,14 +1237,16 @@ bool ULoaderBPFunctionLibrary::CopyVirtualBone(USkeletalMesh *dstMesh, const USk
 			}
 #endif
 
-			if (id < 0) {
+			if (id < 0)
+			{
 				n = VRMGetRefSkeleton(dstMesh).GetBoneName(0);
 			}
 
 			bool bNewSocket = false;
 			USkeletalMeshSocket *s = nullptr;
 			s = VRMGetSkeleton(dstMesh)->FindSocket(t->SocketName);
-			if (s == nullptr) {
+			if (s == nullptr)
+			{
 				s = NewObject<USkeletalMeshSocket>(dstMesh);
 				bNewSocket = true;
 			}
@@ -1121,20 +1255,24 @@ bool ULoaderBPFunctionLibrary::CopyVirtualBone(USkeletalMesh *dstMesh, const USk
 				int32 bone1 = VRMGetRefSkeleton(srcMesh).FindBoneIndex(t->BoneName);
 				int32 bone2 = VRMGetRefSkeleton(dstMesh).FindBoneIndex(n);
 
-				auto getBoneTransform = [](auto &mesh, int32 bone) {
+				auto getBoneTransform = [](auto &mesh, int32 bone)
+				{
 					auto &f = VRMGetRefSkeleton(mesh).GetRefBonePose();
-					if (bone < f.Num()) return f[bone];
+					if (bone < f.Num())
+						return f[bone];
 					return FTransform();
 				};
 
 				FTransform f1;
-				while (bone1 >= 0) {
+				while (bone1 >= 0)
+				{
 					f1 = f1 * getBoneTransform(srcMesh, bone1);
 					bone1 = VRMGetRefSkeleton(srcMesh).GetParentIndex(bone1);
 				}
 
 				FTransform f2;
-				while (bone2 >= 0) {
+				while (bone2 >= 0)
+				{
 					f2 = f2 * getBoneTransform(dstMesh, bone2);
 					bone2 = VRMGetRefSkeleton(dstMesh).GetParentIndex(bone2);
 				}
@@ -1156,7 +1294,8 @@ bool ULoaderBPFunctionLibrary::CopyVirtualBone(USkeletalMesh *dstMesh, const USk
 			s->RelativeScale = t->RelativeScale;
 			s->bForceAlwaysAnimated = t->bForceAlwaysAnimated;
 
-			if (bNewSocket) {
+			if (bNewSocket)
+			{
 				VRMGetSkeleton(dstMesh)->Sockets.Add(s);
 			}
 		}
@@ -1168,27 +1307,31 @@ bool ULoaderBPFunctionLibrary::CopyVirtualBone(USkeletalMesh *dstMesh, const USk
 	return true;
 }
 
+bool ULoaderBPFunctionLibrary::CreateTailBone(USkeletalMesh *skeletalMesh, const TArray<FString> &boneName)
+{
 
-bool ULoaderBPFunctionLibrary::CreateTailBone(USkeletalMesh *skeletalMesh, const TArray<FString> &boneName) {
-
-	if (skeletalMesh == nullptr) {
+	if (skeletalMesh == nullptr)
+	{
 		return false;
 	}
 
 	TArray<int32> tail;
-	for (auto &b : boneName) {
+	for (auto &b : boneName)
+	{
 		int first = VRMGetRefSkeleton(skeletalMesh).FindBoneIndex(*b);
-		if (first < 0) {
+		if (first < 0)
+		{
 			continue;
 		}
 		tail.AddUnique(first);
 	}
-	if (tail.Num() == 0) {
+	if (tail.Num() == 0)
+	{
 		return false;
 	}
 
-	USkeletalMesh *sk_tmp = skeletalMesh;// NewObject<USkeletalMesh>(GetTransientPackage(), NAME_None, EObjectFlags::RF_Public | RF_Transient);
-	USkeleton *k_tmp = VRMGetSkeleton(skeletalMesh);//NewObject<UVrmSkeleton>(GetTransientPackage(), NAME_None, EObjectFlags::RF_Public | RF_Transient);
+	USkeletalMesh *sk_tmp = skeletalMesh;			 // NewObject<USkeletalMesh>(GetTransientPackage(), NAME_None, EObjectFlags::RF_Public | RF_Transient);
+	USkeleton *k_tmp = VRMGetSkeleton(skeletalMesh); // NewObject<UVrmSkeleton>(GetTransientPackage(), NAME_None, EObjectFlags::RF_Public | RF_Transient);
 
 	/*
 	k_tmp->RecreateBoneTree(skeletalMesh);
@@ -1197,10 +1340,12 @@ bool ULoaderBPFunctionLibrary::CreateTailBone(USkeletalMesh *skeletalMesh, const
 	sk_tmp->Skeleton->MergeAllBonesToBoneTree(sk_tmp);
 	*/
 
-	for (int i = 0; i < tail.Num(); ++i) {
+	for (int i = 0; i < tail.Num(); ++i)
+	{
 		TArray<int32> children;
 		VRMUtil::GetDirectChildBones(VRMGetRefSkeleton(sk_tmp), tail[i], children);
-		if (children.Num()) {
+		if (children.Num())
+		{
 			tail.RemoveAt(i);
 			tail.Append(children);
 			--i;
@@ -1210,7 +1355,8 @@ bool ULoaderBPFunctionLibrary::CreateTailBone(USkeletalMesh *skeletalMesh, const
 	bool bAdd = false;
 
 	FReferenceSkeletonModifier RefSkelModifier(VRMGetRefSkeleton(sk_tmp), VRMGetSkeleton(sk_tmp));
-	for (int i = 0; i < tail.Num(); ++i) {
+	for (int i = 0; i < tail.Num(); ++i)
+	{
 		FMeshBoneInfo b;
 		FTransform t;
 
@@ -1219,7 +1365,8 @@ bool ULoaderBPFunctionLibrary::CreateTailBone(USkeletalMesh *skeletalMesh, const
 
 		FString text = TEXT("_vrm4u_dummy_tail");
 
-		if (b.Name.ToString().Contains(text)) {
+		if (b.Name.ToString().Contains(text))
+		{
 			continue;
 		}
 		b.Name = *(b.Name.ToString() + text);
@@ -1229,36 +1376,43 @@ bool ULoaderBPFunctionLibrary::CreateTailBone(USkeletalMesh *skeletalMesh, const
 		bAdd = true;
 	}
 
-	if (bAdd) {
+	if (bAdd)
+	{
 		VRMGetRefSkeleton(sk_tmp).RebuildRefSkeleton(VRMGetSkeleton(sk_tmp), true);
 
 		VRMGetSkeleton(skeletalMesh)->ClearCacheData();
 
 		VRMGetSkeleton(skeletalMesh)->MergeAllBonesToBoneTree(sk_tmp);
 
-		//skeletalMesh->RefSkeleton.RebuildRefSkeleton(skeletalMesh->Skeleton, true);
-
+		// skeletalMesh->RefSkeleton.RebuildRefSkeleton(skeletalMesh->Skeleton, true);
 		{
 			FSkeletalMeshLODRenderData &rd = skeletalMesh->GetResourceForRendering()->LODRenderData[0];
-
 			{
 				int boneNum = VRMGetSkeleton(skeletalMesh)->GetReferenceSkeleton().GetRawBoneNum();
 				rd.RequiredBones.SetNum(boneNum);
 				rd.ActiveBoneIndices.SetNum(boneNum);
 
 #if WITH_EDITOR
-				FSkeletalMeshLODModel *p = &(skeletalMesh->GetImportedModel()->LODModels[0]);
-				p->ActiveBoneIndices.SetNum(boneNum);
-				p->RequiredBones.SetNum(boneNum);
+				FSkeletalMeshLODModel *p = nullptr;
+				if (GIsEditor)
+				{
+					p = &(skeletalMesh->GetImportedModel()->LODModels[0]);
+					p->ActiveBoneIndices.SetNum(boneNum);
+					p->RequiredBones.SetNum(boneNum);
+				}
 #endif
 
-				for (int i = 0; i < boneNum; ++i) {
+				for (int i = 0; i < boneNum; ++i)
+				{
 					rd.RequiredBones[i] = i;
 					rd.ActiveBoneIndices[i] = i;
 
 #if WITH_EDITOR
-					p->ActiveBoneIndices[i] = i;
-					p->RequiredBones[i] = i;
+					if (GIsEditor)
+					{
+						p->ActiveBoneIndices[i] = i;
+						p->RequiredBones[i] = i;
+					}
 #endif
 				}
 			}
@@ -1268,6 +1422,8 @@ bool ULoaderBPFunctionLibrary::CreateTailBone(USkeletalMesh *skeletalMesh, const
 		VRMGetSkeleton(skeletalMesh)->Modify();
 
 #if WITH_EDITOR
+		if (!GIsEditor)
+			return true;
 		skeletalMesh->PostEditChange();
 		VRMGetSkeleton(skeletalMesh)->PostEditChange();
 #endif
@@ -1277,31 +1433,37 @@ bool ULoaderBPFunctionLibrary::CreateTailBone(USkeletalMesh *skeletalMesh, const
 }
 
 #if WITH_EDITOR
-#if	UE_VERSION_OLDER_THAN(5,0,0)
+#if UE_VERSION_OLDER_THAN(5, 0, 0)
 #else
 
-static void LocalEpicSkeletonSetup(UIKRigController *rigcon) {
-	if (rigcon == nullptr) return;
+static void LocalEpicSkeletonSetup(UIKRigController *rigcon)
+{
+	if (!GIsEditor)
+		return;
+
+	if (rigcon == nullptr)
+		return;
 
 	rigcon->SetRetargetRoot(TEXT("Pelvis"));
-	while (rigcon->GetRetargetChains().Num()) {
+	while (rigcon->GetRetargetChains().Num())
+	{
 		rigcon->RemoveRetargetChain(rigcon->GetRetargetChains()[0].ChainName);
 	}
 	VRMAddRetargetChain(rigcon, TEXT("root"), TEXT("root"), TEXT("root"));
 
-
 	int sol_index = 0;
-#if	UE_VERSION_OLDER_THAN(5,2,0)
-	auto* sol = rigcon->GetSolver(sol_index);
+#if UE_VERSION_OLDER_THAN(5, 2, 0)
+	auto *sol = rigcon->GetSolver(sol_index);
 #else
-	auto* sol = rigcon->GetSolverAtIndex(sol_index);
+	auto *sol = rigcon->GetSolverAtIndex(sol_index);
 #endif
 
-	if (sol == nullptr) {
-#if	UE_VERSION_OLDER_THAN(5,2,0)
+	if (sol == nullptr)
+	{
+#if UE_VERSION_OLDER_THAN(5, 2, 0)
 		sol_index = rigcon->AddSolver(UIKRigPBIKSolver::StaticClass());
 		sol = rigcon->GetSolver(sol_index);
-#elif UE_VERSION_OLDER_THAN(5,6,0)
+#elif UE_VERSION_OLDER_THAN(5, 6, 0)
 		sol_index = rigcon->AddSolver(UIKRigFBIKSolver::StaticClass());
 		sol = rigcon->GetSolverAtIndex(sol_index);
 #else
@@ -1309,8 +1471,9 @@ static void LocalEpicSkeletonSetup(UIKRigController *rigcon) {
 		sol = rigcon->GetSolverAtIndex(sol_index);
 #endif
 	}
-	if (sol == nullptr) return;
-#if	UE_VERSION_OLDER_THAN(5,6,0)
+	if (sol == nullptr)
+		return;
+#if UE_VERSION_OLDER_THAN(5, 6, 0)
 	sol->SetRootBone(TEXT("root"));
 #else
 	sol->SetStartBone(TEXT("root"));
@@ -1323,15 +1486,18 @@ static void LocalEpicSkeletonSetup(UIKRigController *rigcon) {
 			TEXT("ball_l"),
 			TEXT("ball_r"),
 		};
-		for (int i = 0; i < a.Num(); ++i) {
-#if	UE_VERSION_OLDER_THAN(5,2,0)
-			auto* goal = rigcon->AddNewGoal(*(a[i] + TEXT("_Goal")), *a[i]);
-			if (goal) {
+		for (int i = 0; i < a.Num(); ++i)
+		{
+#if UE_VERSION_OLDER_THAN(5, 2, 0)
+			auto *goal = rigcon->AddNewGoal(*(a[i] + TEXT("_Goal")), *a[i]);
+			if (goal)
+			{
 				rigcon->ConnectGoalToSolver(*goal, sol_index);
 			}
 #else
 			auto goal = rigcon->AddNewGoal(*(a[i] + TEXT("_Goal")), *a[i]);
-			if (goal != NAME_None) {
+			if (goal != NAME_None)
+			{
 				rigcon->ConnectGoalToSolver(goal, sol_index);
 			}
 #endif
@@ -1341,19 +1507,24 @@ static void LocalEpicSkeletonSetup(UIKRigController *rigcon) {
 #endif
 #endif
 
-//void ULoaderBPFunctionLibrary::VRMGenerateEpicSkeletonToHumanoidIKRig(USkeletalMesh *skeletalMesh, UObject*& rig_o, UObject*& ikr_o){
-void ULoaderBPFunctionLibrary::VRMGenerateEpicSkeletonToHumanoidIKRig(USkeletalMesh * srcSkeletalMesh, UObject * &outRigIK, UObject * &outIKRetargeter, UObject * targetRigIK){
+// void ULoaderBPFunctionLibrary::VRMGenerateEpicSkeletonToHumanoidIKRig(USkeletalMesh *skeletalMesh, UObject*& rig_o, UObject*& ikr_o){
+void ULoaderBPFunctionLibrary::VRMGenerateEpicSkeletonToHumanoidIKRig(USkeletalMesh *srcSkeletalMesh, UObject *&outRigIK, UObject *&outIKRetargeter, UObject *targetRigIK)
+{
 
 #if WITH_EDITOR
-#if	UE_VERSION_OLDER_THAN(5,0,0)
+	if (!GIsEditor)
+		return;
+#if UE_VERSION_OLDER_THAN(5, 0, 0)
 #else
-	USkeletalMesh* sk = srcSkeletalMesh;
-	if (sk == nullptr) {
+	USkeletalMesh *sk = srcSkeletalMesh;
+	if (sk == nullptr)
+	{
 		return;
 	}
 
-	auto LocalGetController = [](UIKRigDefinition * rig) {
-#if	UE_VERSION_OLDER_THAN(5,2,0)
+	auto LocalGetController = [](UIKRigDefinition *rig)
+	{
+#if UE_VERSION_OLDER_THAN(5, 2, 0)
 		return UIKRigController::GetIKRigController(rig);
 #else
 		return UIKRigController::GetController(rig);
@@ -1361,50 +1532,60 @@ void ULoaderBPFunctionLibrary::VRMGenerateEpicSkeletonToHumanoidIKRig(USkeletalM
 	};
 
 	{
-		const FString PkgPath = sk->GetPathName();// GetPackage().pathn
+		const FString PkgPath = sk->GetPathName(); // GetPackage().pathn
 		const FString SavePackagePath = FPaths::GetPath(PkgPath);
 
-		UIKRigDefinition* rig = nullptr;
+		UIKRigDefinition *rig = nullptr;
 		{
 			FString name = FString(TEXT("IK_")) + sk->GetName() + TEXT("_VrmHumanoid");
-			UPackage* pkg = CreatePackage(*(SavePackagePath +"/"+ name));
+			UPackage *pkg = CreatePackage(*(SavePackagePath + "/" + name));
 
 			{
-				auto* a = FindObject<UIKRigDefinition>(NULL, *(SavePackagePath + "/" + name + TEXT(".") + name));
-				if (a != nullptr) {
+				auto *a = FindObject<UIKRigDefinition>(NULL, *(SavePackagePath + "/" + name + TEXT(".") + name));
+				if (a != nullptr)
+				{
 					rig = a;
 				}
 			}
-			if (rig == nullptr) {
+			if (rig == nullptr)
+			{
 				rig = VRM4U_NewObject<UIKRigDefinition>(pkg, *name, RF_Public | RF_Standalone);
 			}
 
-			UIKRigController* rigcon = LocalGetController(rig);
+			UIKRigController *rigcon = LocalGetController(rig);
 			rigcon->SetSkeletalMesh(sk);
 			LocalEpicSkeletonSetup(rigcon);
 
 			// bone chain
-			for (auto& modelName : VRMUtil::table_ue4_vrm) {
-				if (modelName.BoneVRM == "") continue;
-				//if (modelName.BoneUE4 == "") continue; // commentout add as none
+			for (auto &modelName : VRMUtil::table_ue4_vrm)
+			{
+				if (modelName.BoneVRM == "")
+					continue;
+				// if (modelName.BoneUE4 == "") continue; // commentout add as none
 
 				// spine
 				int type = 0;
-				if (modelName.BoneVRM == TEXT("spine")) {
+				if (modelName.BoneVRM == TEXT("spine"))
+				{
 					type = 1;
 				}
-				if (modelName.BoneVRM == TEXT("chest") || modelName.BoneVRM == TEXT("upperChest")) {
+				if (modelName.BoneVRM == TEXT("chest") || modelName.BoneVRM == TEXT("upperChest"))
+				{
 					type = 2;
 				}
 
-				switch (type) {
+				switch (type)
+				{
 				case 0:
 					VRMAddRetargetChain(rigcon, *modelName.BoneVRM, *modelName.BoneUE4, *modelName.BoneUE4);
-						break;
+					break;
 				case 1:
-					if (sk->GetRefSkeleton().FindBoneIndex(TEXT("spine_05")) != INDEX_NONE) {
+					if (sk->GetRefSkeleton().FindBoneIndex(TEXT("spine_05")) != INDEX_NONE)
+					{
 						VRMAddRetargetChain(rigcon, TEXT("spine"), TEXT("spine_01"), TEXT("spine_05"));
-					} else {
+					}
+					else
+					{
 						VRMAddRetargetChain(rigcon, TEXT("spine"), TEXT("spine_01"), TEXT("spine_03"));
 					}
 					break;
@@ -1412,34 +1593,39 @@ void ULoaderBPFunctionLibrary::VRMGenerateEpicSkeletonToHumanoidIKRig(USkeletalM
 					break;
 				}
 			}
-			//VRMAddRetargetChain(rigcon, TEXT("leftEye"), NAME_None, NAME_None);
-			//VRMAddRetargetChain(rigcon, TEXT("rightEye"), NAME_None, NAME_None);
+			// VRMAddRetargetChain(rigcon, TEXT("leftEye"), NAME_None, NAME_None);
+			// VRMAddRetargetChain(rigcon, TEXT("rightEye"), NAME_None, NAME_None);
 		}
 
 		{
 			// sub epic bone
-			UIKRigDefinition* rig_epic = nullptr;
+			UIKRigDefinition *rig_epic = nullptr;
 			FString name = FString(TEXT("IK_")) + sk->GetName() + TEXT("_MannequinBone");
-			UPackage* pkg = CreatePackage(*(SavePackagePath + "/" + name));
+			UPackage *pkg = CreatePackage(*(SavePackagePath + "/" + name));
 
 			{
-				auto* a = FindObject<UIKRigDefinition>(NULL, *(SavePackagePath + "/" + name + TEXT(".") + name));
-				if (a != nullptr) {
+				auto *a = FindObject<UIKRigDefinition>(NULL, *(SavePackagePath + "/" + name + TEXT(".") + name));
+				if (a != nullptr)
+				{
 					rig_epic = a;
 				}
 			}
-			if (rig_epic == nullptr) {
+			if (rig_epic == nullptr)
+			{
 				rig_epic = VRM4U_NewObject<UIKRigDefinition>(pkg, *name, RF_Public | RF_Standalone);
 			}
 
-			UIKRigController* rigcon = LocalGetController(rig_epic);
+			UIKRigController *rigcon = LocalGetController(rig_epic);
 			rigcon->SetSkeletalMesh(sk);
 			LocalEpicSkeletonSetup(rigcon);
 
 			// bone chain
-			for (auto& modelName : VRMUtil::table_ue4_vrm) {
-				if (modelName.BoneVRM == "") continue;
-				if (modelName.BoneUE4 == "") continue;
+			for (auto &modelName : VRMUtil::table_ue4_vrm)
+			{
+				if (modelName.BoneVRM == "")
+					continue;
+				if (modelName.BoneUE4 == "")
+					continue;
 				VRMAddRetargetChain(rigcon, *modelName.BoneUE4, *modelName.BoneUE4, *modelName.BoneUE4);
 			}
 		}
@@ -1502,22 +1688,24 @@ void ULoaderBPFunctionLibrary::VRMGenerateEpicSkeletonToHumanoidIKRig(USkeletalM
 		}
 		*/
 
-		UIKRetargeter* ikr = nullptr;
+		UIKRetargeter *ikr = nullptr;
 		{
 			FString name = FString(TEXT("RTG_")) + sk->GetName();
-			UPackage* pkg = CreatePackage(*(SavePackagePath +"/"+ name));
+			UPackage *pkg = CreatePackage(*(SavePackagePath + "/" + name));
 
 			{
-				auto* a = FindObject<UIKRetargeter>(NULL, *(SavePackagePath + "/" + name + TEXT(".") + name));
-				if (a != nullptr) {
+				auto *a = FindObject<UIKRetargeter>(NULL, *(SavePackagePath + "/" + name + TEXT(".") + name));
+				if (a != nullptr)
+				{
 					ikr = a;
 				}
 			}
-			if (ikr == nullptr) {
+			if (ikr == nullptr)
+			{
 				ikr = VRM4U_NewObject<UIKRetargeter>(pkg, *name, RF_Public | RF_Standalone);
 			}
-			UIKRetargeterController* c = UIKRetargeterController::GetController(ikr);
-#if	UE_VERSION_OLDER_THAN(5,2,0)
+			UIKRetargeterController *c = UIKRetargeterController::GetController(ikr);
+#if UE_VERSION_OLDER_THAN(5, 2, 0)
 			c->SetSourceIKRig(rig);
 #else
 			c->SetIKRig(ERetargetSourceOrTarget::Source, rig);
@@ -1535,37 +1723,47 @@ void ULoaderBPFunctionLibrary::VRMGenerateEpicSkeletonToHumanoidIKRig(USkeletalM
 	return;
 }
 
-
-void ULoaderBPFunctionLibrary::VRMGenerateIKRetargeterPose(UObject* IKRetargeter, UObject* targetRigIK, UPoseAsset* targetPose) {
+void ULoaderBPFunctionLibrary::VRMGenerateIKRetargeterPose(UObject *IKRetargeter, UObject *targetRigIK, UPoseAsset *targetPose)
+{
 #if WITH_EDITOR
-#if	UE_VERSION_OLDER_THAN(5,0,0)
+	if (!GIsEditor)
+		return;
+#if UE_VERSION_OLDER_THAN(5, 0, 0)
 #else
 
-	if (targetPose == nullptr) return;
+	if (targetPose == nullptr)
+		return;
 
-	UIKRetargeter* ikr = Cast<UIKRetargeter>(IKRetargeter);
-	if (ikr == nullptr) return;
+	UIKRetargeter *ikr = Cast<UIKRetargeter>(IKRetargeter);
+	if (ikr == nullptr)
+		return;
 
-	UIKRetargeterController* c = UIKRetargeterController::GetController(ikr);
-	if (c == nullptr) return;
+	UIKRetargeterController *c = UIKRetargeterController::GetController(ikr);
+	if (c == nullptr)
+		return;
 
-#if UE_VERSION_OLDER_THAN(5,1,0)
+#if UE_VERSION_OLDER_THAN(5, 1, 0)
 	// setup A-Pose
-	if (targetRigIK) {
+	if (targetRigIK)
+	{
 		c->SetTargetIKRig(Cast<UIKRigDefinition>(targetRigIK));
 	}
 
-	if (c->GetAsset()->GetTargetIKRig() && targetPose) {
-		//UIKRigDefinition* d = Cast<UIKRigDefinition>(targetRigIK);
-		USkeletalMesh* targetSK = targetPose->GetPreviewMesh();
+	if (c->GetAsset()->GetTargetIKRig() && targetPose)
+	{
+		// UIKRigDefinition* d = Cast<UIKRigDefinition>(targetRigIK);
+		USkeletalMesh *targetSK = targetPose->GetPreviewMesh();
 
-		UPoseAsset* pose = targetPose;
-		for (int poseNum = 0; poseNum < 10; ++poseNum) {
+		UPoseAsset *pose = targetPose;
+		for (int poseNum = 0; poseNum < 10; ++poseNum)
+		{
 			auto poseName = pose->GetPoseNameByIndex(poseNum);
-			if (poseName == NAME_None) break;
+			if (poseName == NAME_None)
+				break;
 
 			// add pose
-			if (poseName == c->MakePoseNameUnique(poseName)) {
+			if (poseName == c->MakePoseNameUnique(poseName))
+			{
 				c->AddRetargetPose(poseName);
 			}
 			c->SetCurrentRetargetPose(poseName);
@@ -1575,9 +1773,11 @@ void ULoaderBPFunctionLibrary::VRMGenerateIKRetargeterPose(UObject* IKRetargeter
 			TArray<FTransform> outTrans;
 			pose->GetFullPose(poseNum, outTrans);
 
-			auto& rsk = targetSK->GetRefSkeleton();
-			for (int i = 0; i < rsk.GetRawBoneNum(); ++i) {
-				if (outTrans.IsValidIndex(i) == false) {
+			auto &rsk = targetSK->GetRefSkeleton();
+			for (int i = 0; i < rsk.GetRawBoneNum(); ++i)
+			{
+				if (outTrans.IsValidIndex(i) == false)
+				{
 					continue;
 				}
 				auto q = outTrans[i].GetRotation();
@@ -1590,8 +1790,6 @@ void ULoaderBPFunctionLibrary::VRMGenerateIKRetargeterPose(UObject* IKRetargeter
 	}
 #else
 #endif
-
 #endif
 #endif // editor
-
 }
